@@ -43,6 +43,10 @@
 #include <cctype>
 #include <cstdio>
 
+#include <iostream>
+
+#include <fstream>
+
 #include "windows.h"
 #include "avisynth.h"
 
@@ -474,18 +478,26 @@ void __stdcall RemapFrames::GetAudio(void* buf, __int64 start, __int64 count, IS
     int channels = vi.AudioChannels();
 
     VideoInfo videoInfo = child->GetVideoInfo();
-    double videoFramerate = videoInfo.fps_numerator / videoInfo.fps_denominator;
-    int audioSampleRate = videoInfo.audio_samples_per_second;
+    long double videoFramerate = (long double)videoInfo.fps_numerator / (long double)videoInfo.fps_denominator;
+    long double audioSampleRate = videoInfo.audio_samples_per_second;
 
     // get video frame range
-    double seconds, frame;
+    long double seconds, frame;
     int whichFrame,frameNext,framePrevious; 
     bool frameRunBackwards;
-    double frameOffset;
-    double samplesPerFrame = (double)audioSampleRate / videoFramerate;
-    double invertedFrameOffset;
+    long double frameOffset;
+    long double samplesPerFrame = audioSampleRate / videoFramerate;
+    long double invertedFrameOffset;
     __int64 sampleToGet = 0;
+    long double actualFrameToGet;
 
+    /*
+    std::ofstream myfile;
+    myfile.open("blah.txt", std::ios::out | std::ios::app);
+    myfile <<  videoFramerate << "\n";
+    myfile << audioSampleRate << "\n";
+    myfile.close();
+    */
 
     SFLOAT* singleSampleBuffer = new SFLOAT[vi.AudioChannels()];
 
@@ -495,7 +507,7 @@ void __stdcall RemapFrames::GetAudio(void* buf, __int64 start, __int64 count, IS
         for (int i = 0; i < count; i++) {
             
             // Calculate correct source sample
-           /* absolutePlace = start + i;
+            absolutePlace = start + i;
             seconds = absolutePlace / audioSampleRate;
             frame = seconds * videoFramerate;
             whichFrame = std::min(std::max((int)frame, 0), int(indices.size() - 1));
@@ -506,15 +518,16 @@ void __stdcall RemapFrames::GetAudio(void* buf, __int64 start, __int64 count, IS
             frameRunBackwards = indices[frameNext].frame < indices[whichFrame].frame && indices[framePrevious].frame > indices[whichFrame].frame;
 
             // Determine proper sample
-            frameOffset = frame - (double)whichFrame;
-            invertedFrameOffset = samplesPerFrame - frameOffset;
+            frameOffset = frame - (long double)whichFrame;
+            invertedFrameOffset = 1.0 - frameOffset;
             
-            sampleToGet = (__int64)vi.AudioChannels() * std::min(vi.num_audio_samples, std::max((__int64)0, (__int64)(frameRunBackwards ? (double)indices[whichFrame].frame + invertedFrameOffset : (double)indices[whichFrame].frame + frameOffset)));
-            child->GetAudio(singleSampleBuffer, sampleToGet, 1, env);*/
-            
-            sampleToGet = start + (__int64)i;
-            
+            actualFrameToGet = (frameRunBackwards ? (long double)indices[whichFrame].frame + invertedFrameOffset : (long double)indices[whichFrame].frame + frameOffset);
+            sampleToGet = std::min(vi.num_audio_samples, std::max((__int64)0, (__int64)(0.5+actualFrameToGet/videoFramerate*audioSampleRate)));
             child->GetAudio(singleSampleBuffer, sampleToGet, 1, env);
+            
+            /*works: sampleToGet = start + (__int64)i;
+            
+            child->GetAudio(singleSampleBuffer, sampleToGet, 1, env);*/
             
             for (int j = 0; j < channels; j++) {
                 samples[i * channels + j] = singleSampleBuffer[j];
