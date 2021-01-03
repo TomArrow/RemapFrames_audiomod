@@ -94,9 +94,10 @@ bool RemapFrames::is_empty_string (const char *str_0)
   * PRE:
   *     Either filenameP or mappingsP must be NULL, but not both.
   */
-void RemapFrames::initSimpleMode(const char* filenameP, const char* mappingsP,
+void RemapFrames::initSimpleMode(const char* filenameP, const char* mappingsP, const double audioBlendSamplesArg,
                                  bool tol_flag, IScriptEnvironment* envP)
 {
+    audioBlendSamples = audioBlendSamplesArg;
     if (filenameP == NULL && mappingsP == NULL)
     {
         if (tol_flag)
@@ -424,7 +425,7 @@ void RemapFrames::initAdvancedMode(const char* filenameP, const char* mappingsP,
   *     IN/OUT envP    - pointer to the AviSynth scripting environment
   */
 RemapFrames::RemapFrames(PClip child_, PClip sourceClip_, mode_t mode,
-                         const char* filenameP, const char* mappingsP,
+                         const char* filenameP, const char* mappingsP, const double audioBlendSamplesArg,
                          bool tol_flag, IScriptEnvironment* envP)
 : GenericVideoFilter(child_),
   sourceClip(sourceClip_),
@@ -436,9 +437,9 @@ RemapFrames::RemapFrames(PClip child_, PClip sourceClip_, mode_t mode,
     switch (mode)
     {
         case MODE_SIMPLE:
-            initSimpleMode(filenameP, mappingsP, tol_flag, envP);
+            initSimpleMode(filenameP, mappingsP, audioBlendSamplesArg, tol_flag, envP);
             break;
-
+/*
         case MODE_REPLACE_SIMPLE:
             initReplaceSimpleMode(filenameP, mappingsP, tol_flag, envP);
             break;
@@ -446,7 +447,7 @@ RemapFrames::RemapFrames(PClip child_, PClip sourceClip_, mode_t mode,
         case MODE_ADVANCED:
             initAdvancedMode(filenameP, mappingsP, tol_flag, envP);
             break;
-
+            */
         default:
             assert(false);
     }
@@ -498,6 +499,7 @@ void __stdcall RemapFrames::GetAudio(void* buf, __int64 start, __int64 count, IS
     myfile << audioSampleRate << "\n";
     myfile.close();
     */
+
 
     SFLOAT* singleSampleBuffer = new SFLOAT[vi.AudioChannels()];
 
@@ -571,6 +573,7 @@ bool __stdcall RemapFrames::GetParity(int n)
   * RETURNS:
   *     the new video clip
   */
+/*
 AVSValue __cdecl RemapFrames::Create(AVSValue args, void* userDataP, IScriptEnvironment* envP)
 {
     const int       i_f = (userDataP == 0) ? 1 : 2;
@@ -598,7 +601,7 @@ AVSValue __cdecl RemapFrames::Create(AVSValue args, void* userDataP, IScriptEnvi
     return (AVSValue (new RemapFrames (
         clip, sourceClip, MODE_ADVANCED, filenameP, mappingsP, (userDataP != 0), envP
     )));
-}
+}*/
 
 
 AVSValue __cdecl RemapFrames::CreateSimple(AVSValue args, void* userDataP, IScriptEnvironment* envP)
@@ -613,6 +616,7 @@ AVSValue __cdecl RemapFrames::CreateSimple(AVSValue args, void* userDataP, IScri
 
     const char* filenameP = args[i_f].Defined () ? args[i_f].AsString() : 0;
     const char* mappingsP = args[i_m].Defined () ? args[i_m].AsString() : 0;
+    const double audioBlendSamplesArg = args[3].Defined () ? args[i_m].AsFloat() : 0;
 
     if (   clip->GetVideoInfo().num_frames == 0
         || (userDataP != 0 && is_empty_string (filenameP) && is_empty_string (mappingsP)))
@@ -622,11 +626,11 @@ AVSValue __cdecl RemapFrames::CreateSimple(AVSValue args, void* userDataP, IScri
     }
 
     return (AVSValue (new RemapFrames (
-        clip, clip, MODE_SIMPLE, filenameP, mappingsP, (userDataP != 0), envP
+        clip, clip, MODE_SIMPLE, filenameP, mappingsP, audioBlendSamplesArg, (userDataP != 0), envP
     )));
 }
 
-
+/*
 AVSValue __cdecl RemapFrames::CreateReplaceSimple(AVSValue args, void* userDataP, IScriptEnvironment* envP)
 {
     const int       i_f = (userDataP == 0) ? 2 : 3;
@@ -729,7 +733,7 @@ AVSValue __cdecl RemapFrames::CreateMerge (AVSValue args, void* userDataP, IScri
     return (envP->SaveString (result.c_str (), int (result.length ())));
 }
 
-
+*/
 
 /** AvisynthPluginInit2
   *
@@ -750,7 +754,7 @@ extern "C" __declspec(dllexport) const char* __stdcall AvisynthPluginInit3(IScri
 {
     AVS_linkage = vectors;
     //envP->AddFunction("RemapFrames", "c[filename]s[mappings]s[sourceClip]c", RemapFrames::Create, NULL);
-    envP->AddFunction("RemapFramesSimple_AudioMod", "c[filename]s[mappings]s", RemapFrames::CreateSimple, NULL);
+    envP->AddFunction("RemapFramesSimple_AudioMod", "c[filename]s[mappings]s[audioBlendSamples]i", RemapFrames::CreateSimple, NULL);
     //envP->AddFunction("ReplaceFramesSimple", "cc[filename]s[mappings]s", RemapFrames::CreateReplaceSimple, NULL);
 
     //envP->AddFunction("remf", "c[mappings]s[filename]s[sourceClip]c", RemapFrames::Create, (void *)1);

@@ -75,17 +75,19 @@ public:
 private:
     PClip sourceClip;
 
+    double audioBlendSamples;
+
     // Stores the rearranged frame indices.
     std::vector<MapIndex> indices;
 
     static bool is_empty_string (const char *str_0);
 
-    void initSimpleMode(const char* filenameP, const char* mappingsP, bool tol_flag, IScriptEnvironment* envP);
+    void initSimpleMode(const char* filenameP, const char* mappingsP, const double audioBlendSamplesArg,bool tol_flag, IScriptEnvironment* envP);
     void initReplaceSimpleMode(const char* filenameP, const char* mappingsP, bool tol_flag, IScriptEnvironment* envP);
     void initAdvancedMode(const char* filenameP, const char* mappingsP, bool tol_flag, IScriptEnvironment* envP);
 
     explicit RemapFrames(PClip child_, PClip sourceClip_, mode_t mode,
-                         const char* filenameP, const char* mappingsP,
+                         const char* filenameP, const char* mappingsP, const double audioBlendSamplesArg,
                          bool tol_flag, IScriptEnvironment* envP);
 };
 
