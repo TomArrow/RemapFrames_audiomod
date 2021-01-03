@@ -94,7 +94,7 @@ bool RemapFrames::is_empty_string (const char *str_0)
   * PRE:
   *     Either filenameP or mappingsP must be NULL, but not both.
   */
-void RemapFrames::initSimpleMode(const char* filenameP, const char* mappingsP, const double audioBlendSamplesArg,
+void RemapFrames::initSimpleMode(const char* filenameP, const char* mappingsP, const int audioBlendSamplesArg,
                                  bool tol_flag, IScriptEnvironment* envP)
 {
     audioBlendSamples = audioBlendSamplesArg;
@@ -201,6 +201,7 @@ void RemapFrames::initSimpleMode(const char* filenameP, const char* mappingsP, c
   * PRE:
   *     At least one of filenameP or mappingsP must not be NULL.
   */
+/*
 void RemapFrames::initReplaceSimpleMode(const char* filenameP, const char* mappingsP,
                                         bool tol_flag, IScriptEnvironment* envP)
 {
@@ -296,7 +297,7 @@ void RemapFrames::initReplaceSimpleMode(const char* filenameP, const char* mappi
         envP->ThrowError("ReplaceFramesSimple: insufficient memory");
     }
 }
-
+*/
 
 /** initAdvancedMode
   *
@@ -312,7 +313,7 @@ void RemapFrames::initReplaceSimpleMode(const char* filenameP, const char* mappi
   *
   * PRE:
   *     At least one of filenameP or mappingsP must not be NULL.
-  */
+  *//*
 void RemapFrames::initAdvancedMode(const char* filenameP, const char* mappingsP,
                                    bool tol_flag, IScriptEnvironment* envP)
 {
@@ -408,7 +409,7 @@ void RemapFrames::initAdvancedMode(const char* filenameP, const char* mappingsP,
         envP->ThrowError("RemapFrames: insufficient memory");
     }
 }
-
+*/
 
 /** RemapFrames constructor
   *
@@ -425,7 +426,7 @@ void RemapFrames::initAdvancedMode(const char* filenameP, const char* mappingsP,
   *     IN/OUT envP    - pointer to the AviSynth scripting environment
   */
 RemapFrames::RemapFrames(PClip child_, PClip sourceClip_, mode_t mode,
-                         const char* filenameP, const char* mappingsP, const double audioBlendSamplesArg,
+                         const char* filenameP, const char* mappingsP, const int audioBlendSamplesArg,
                          bool tol_flag, IScriptEnvironment* envP)
 : GenericVideoFilter(child_),
   sourceClip(sourceClip_),
@@ -473,6 +474,10 @@ PVideoFrame __stdcall RemapFrames::GetFrame(int n, IScriptEnvironment* envP)
 }
 
 
+struct RemapFrames::remappedAudioSample {
+    long long audioSample;
+    bool backwards;
+};
 
 void __stdcall RemapFrames::GetAudio(void* buf, __int64 start, __int64 count, IScriptEnvironment* env) {
     
@@ -499,45 +504,131 @@ void __stdcall RemapFrames::GetAudio(void* buf, __int64 start, __int64 count, IS
     myfile << audioSampleRate << "\n";
     myfile.close();
     */
-
+    // Audio sample related variables
+    long double framePlace;
+    long double roundedFramePlace;
+    long double distanceFromFrameBoundary;
+    long double mainSampleIntensity;
+    long double foreignSampleIntensity;
+    long double mixSamplePosition;
 
     SFLOAT* singleSampleBuffer = new SFLOAT[vi.AudioChannels()];
+    SFLOAT* singleMixSampleBuffer = new SFLOAT[vi.AudioChannels()];
 
     __int64 absolutePlace;
     if (vi.SampleType() == SAMPLE_FLOAT) {
         SFLOAT* samples = (SFLOAT*)buf;
         for (int i = 0; i < count; i++) {
             
-            // Calculate correct source sample
-            absolutePlace = start + i;
-            seconds = absolutePlace / audioSampleRate;
-            frame = seconds * videoFramerate;
-            whichFrame = std::min(std::max((int)frame, 0), int(indices.size() - 1));
-            frameNext = std::min(std::max(whichFrame+1, 0), int(indices.size() - 1));
-            framePrevious = std::min(std::max(whichFrame -1, 0), int(indices.size() - 1));
+            // "Straightforward" just get the sample we want
+            if (audioBlendSamples == 0) {
 
-            // Determine if audio should run backwards.
-            frameRunBackwards = indices[frameNext].frame < indices[whichFrame].frame && indices[framePrevious].frame > indices[whichFrame].frame;
+                // Calculate correct source sample
+                absolutePlace = start + i;
+                seconds = absolutePlace / audioSampleRate;
+                frame = seconds * videoFramerate;
+                whichFrame = std::min(std::max((int)frame, 0), int(indices.size() - 1));
+                frameNext = std::min(std::max(whichFrame+1, 0), int(indices.size() - 1));
+                framePrevious = std::min(std::max(whichFrame -1, 0), int(indices.size() - 1));
 
-            // Determine proper sample
-            frameOffset = frame - (long double)whichFrame;
-            invertedFrameOffset = 1.0 - frameOffset;
+                // Determine if audio should run backwards.
+                frameRunBackwards = indices[frameNext].frame < indices[whichFrame].frame && indices[framePrevious].frame > indices[whichFrame].frame;
+
+                // Determine proper sample
+                frameOffset = frame - (long double)whichFrame;
+                invertedFrameOffset = 1.0 - frameOffset;
             
-            actualFrameToGet = (frameRunBackwards ? (long double)indices[whichFrame].frame + invertedFrameOffset : (long double)indices[whichFrame].frame + frameOffset);
-            sampleToGet = std::min(vi.num_audio_samples, std::max((__int64)0, (__int64)(0.5+actualFrameToGet/videoFramerate*audioSampleRate)));
-            child->GetAudio(singleSampleBuffer, sampleToGet, 1, env);
+                actualFrameToGet = (frameRunBackwards ? (long double)indices[whichFrame].frame + invertedFrameOffset : (long double)indices[whichFrame].frame + frameOffset);
+                sampleToGet = std::min(vi.num_audio_samples, std::max((__int64)0, (__int64)(0.5+actualFrameToGet/videoFramerate*audioSampleRate)));
+                child->GetAudio(singleSampleBuffer, sampleToGet, 1, env);
             
-            /*works: sampleToGet = start + (__int64)i;
+                /*works: sampleToGet = start + (__int64)i;
             
-            child->GetAudio(singleSampleBuffer, sampleToGet, 1, env);*/
+                child->GetAudio(singleSampleBuffer, sampleToGet, 1, env);*/
             
-            for (int j = 0; j < channels; j++) {
-                samples[i * channels + j] = singleSampleBuffer[j];
+                for (int j = 0; j < channels; j++) {
+                    samples[i * channels + j] = singleSampleBuffer[j];
+                }
+            }
+            // Or do blending ...
+            else {
+                // Calculate correct source sample
+                absolutePlace = start + i;
+                
+                framePlace = ((long double)absolutePlace / samplesPerFrame);
+                roundedFramePlace = round((long double)absolutePlace / samplesPerFrame);
+                distanceFromFrameBoundary = abs( framePlace - roundedFramePlace);
+                
+                
+                remappedAudioSample mainSample = remapAudioSample(absolutePlace, audioSampleRate, videoFramerate);
+                
+                if (distanceFromFrameBoundary > audioBlendSamples || roundedFramePlace == 0) {
+                    // All good. No blending needed.
+                    sampleToGet = mainSample.audioSample;
+                    child->GetAudio(singleSampleBuffer, sampleToGet, 1, env);
+                }
+                else {
+                    mainSampleIntensity = (long double)0.5 + ((long double)0.5 *  distanceFromFrameBoundary / audioBlendSamples); // 0.5 because we only blend half way, the other half is blended in the other frame.
+                    foreignSampleIntensity = 1 - mainSampleIntensity;
+                    if (roundedFramePlace > framePlace) {
+                        remappedAudioSample nextFrameSample = remapAudioSample(absolutePlace + samplesPerFrame, audioSampleRate, videoFramerate);
+                        mixSamplePosition = nextFrameSample.audioSample - (nextFrameSample.backwards ? audioSampleRate : -audioSampleRate); 
+                    }
+                    else {
+                        remappedAudioSample lastFrameSample = remapAudioSample(absolutePlace - samplesPerFrame, audioSampleRate, videoFramerate);
+                        mixSamplePosition = lastFrameSample.audioSample + (lastFrameSample.backwards ? audioSampleRate : -audioSampleRate);
+                    }
+                    child->GetAudio(singleSampleBuffer, mainSample.audioSample, 1, env);
+                    child->GetAudio(singleMixSampleBuffer, mixSamplePosition, 1, env);
+                    for (int j = 0; j < channels; j++) {
+                        singleSampleBuffer[j] = mainSampleIntensity *singleSampleBuffer[j] + foreignSampleIntensity*singleMixSampleBuffer[j];
+                    }
+                }
+
+                /*works: sampleToGet = start + (__int64)i;
+
+                child->GetAudio(singleSampleBuffer, sampleToGet, 1, env);*/
+
+                for (int j = 0; j < channels; j++) {
+                    samples[i * channels + j] = singleSampleBuffer[j];
+                }
             }
         }
     }
 }
 
+
+inline RemapFrames::remappedAudioSample RemapFrames::remapAudioSample(long long originalAudioSample, long double audioSampleRate, long double videoFramerate) {
+    
+    long double seconds, frame;
+    int whichFrame, frameNext, framePrevious;
+    bool frameRunBackwards;
+    long double frameOffset;
+    long double samplesPerFrame = audioSampleRate / videoFramerate;
+    long double invertedFrameOffset;
+    __int64 sampleToGet = 0;
+    long double actualFrameToGet;
+
+    seconds = originalAudioSample / audioSampleRate;
+    frame = seconds * videoFramerate;
+    whichFrame = std::min(std::max((int)frame, 0), int(indices.size() - 1));
+    frameNext = std::min(std::max(whichFrame + 1, 0), int(indices.size() - 1));
+    framePrevious = std::min(std::max(whichFrame - 1, 0), int(indices.size() - 1));
+
+    // Determine if audio should run backwards.
+    frameRunBackwards = indices[frameNext].frame < indices[whichFrame].frame&& indices[framePrevious].frame > indices[whichFrame].frame;
+
+    // Determine proper sample
+    frameOffset = frame - (long double)whichFrame;
+    invertedFrameOffset = 1.0 - frameOffset;
+
+    actualFrameToGet = (frameRunBackwards ? (long double)indices[whichFrame].frame + invertedFrameOffset : (long double)indices[whichFrame].frame + frameOffset);
+    sampleToGet = std::min(vi.num_audio_samples, std::max((__int64)0, (__int64)(0.5 + actualFrameToGet / videoFramerate * audioSampleRate)));
+    remappedAudioSample returnValue;
+    returnValue.audioSample = sampleToGet;
+    returnValue.backwards = frameRunBackwards;
+    return returnValue;
+}
 
 /** GetParity
   *
@@ -616,7 +707,7 @@ AVSValue __cdecl RemapFrames::CreateSimple(AVSValue args, void* userDataP, IScri
 
     const char* filenameP = args[i_f].Defined () ? args[i_f].AsString() : 0;
     const char* mappingsP = args[i_m].Defined () ? args[i_m].AsString() : 0;
-    const double audioBlendSamplesArg = args[3].Defined () ? args[i_m].AsFloat() : 0;
+    const int audioBlendSamplesArg = args[3].Defined () ? args[i_m].AsInt() : 0;
 
     if (   clip->GetVideoInfo().num_frames == 0
         || (userDataP != 0 && is_empty_string (filenameP) && is_empty_string (mappingsP)))

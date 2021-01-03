@@ -66,28 +66,32 @@ public:
     void __stdcall GetAudio(void* buf, __int64 start, __int64 count, IScriptEnvironment* env);
     virtual bool __stdcall GetParity(int n);
 
-    static AVSValue __cdecl Create(AVSValue args, void* userDataP, IScriptEnvironment* envP);
+    //static AVSValue __cdecl Create(AVSValue args, void* userDataP, IScriptEnvironment* envP);
     static AVSValue __cdecl CreateSimple(AVSValue args, void* userDataP, IScriptEnvironment* envP);
-    static AVSValue __cdecl CreateReplaceSimple(AVSValue args, void* userDataP, IScriptEnvironment* envP);
-    static AVSValue __cdecl CreateTransform(AVSValue args, void* userDataP, IScriptEnvironment* envP);
-    static AVSValue __cdecl CreateMerge(AVSValue args, void* userDataP, IScriptEnvironment* envP);
+    //static AVSValue __cdecl CreateReplaceSimple(AVSValue args, void* userDataP, IScriptEnvironment* envP);
+    //static AVSValue __cdecl CreateTransform(AVSValue args, void* userDataP, IScriptEnvironment* envP);
+    //static AVSValue __cdecl CreateMerge(AVSValue args, void* userDataP, IScriptEnvironment* envP);
 
 private:
     PClip sourceClip;
 
-    double audioBlendSamples;
+    int audioBlendSamples;
 
     // Stores the rearranged frame indices.
     std::vector<MapIndex> indices;
 
     static bool is_empty_string (const char *str_0);
 
-    void initSimpleMode(const char* filenameP, const char* mappingsP, const double audioBlendSamplesArg,bool tol_flag, IScriptEnvironment* envP);
-    void initReplaceSimpleMode(const char* filenameP, const char* mappingsP, bool tol_flag, IScriptEnvironment* envP);
-    void initAdvancedMode(const char* filenameP, const char* mappingsP, bool tol_flag, IScriptEnvironment* envP);
+    void initSimpleMode(const char* filenameP, const char* mappingsP, const int audioBlendSamplesArg,bool tol_flag, IScriptEnvironment* envP);
+    //void initReplaceSimpleMode(const char* filenameP, const char* mappingsP, bool tol_flag, IScriptEnvironment* envP);
+    //void initAdvancedMode(const char* filenameP, const char* mappingsP, bool tol_flag, IScriptEnvironment* envP);
+
+    struct remappedAudioSample;
+
+    inline remappedAudioSample remapAudioSample(long long originalAudioSample, long double audioSampleRate, long double videoFramerate);
 
     explicit RemapFrames(PClip child_, PClip sourceClip_, mode_t mode,
-                         const char* filenameP, const char* mappingsP, const double audioBlendSamplesArg,
+                         const char* filenameP, const char* mappingsP, const int audioBlendSamplesArg,
                          bool tol_flag, IScriptEnvironment* envP);
 };
 
