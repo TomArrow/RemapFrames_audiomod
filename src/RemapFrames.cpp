@@ -435,6 +435,7 @@ RemapFrames::RemapFrames(PClip child_, PClip sourceClip_, mode_t mode,
     assert(vi.num_frames > 0);
     assert(sourceClip->GetVideoInfo().num_frames > 0);
 
+
     switch (mode)
     {
         case MODE_SIMPLE:
@@ -476,6 +477,7 @@ PVideoFrame __stdcall RemapFrames::GetFrame(int n, IScriptEnvironment* envP)
 
 struct RemapFrames::remappedAudioSample {
     long long audioSample;
+    long long realFrame;
     bool backwards;
 };
 
@@ -497,13 +499,14 @@ void __stdcall RemapFrames::GetAudio(void* buf, __int64 start, __int64 count, IS
     __int64 sampleToGet = 0;
     long double actualFrameToGet;
 
-    /*
-    std::ofstream myfile;
+    
+    /*std::ofstream myfile;
     myfile.open("blah.txt", std::ios::out | std::ios::app);
     myfile <<  videoFramerate << "\n";
     myfile << audioSampleRate << "\n";
-    myfile.close();
-    */
+    myfile << audioBlendSamples << "\n";
+    myfile.close();*/
+    
     // Audio sample related variables
     long double framePlace;
     long double roundedFramePlace;
@@ -511,6 +514,7 @@ void __stdcall RemapFrames::GetAudio(void* buf, __int64 start, __int64 count, IS
     long double mainSampleIntensity;
     long double foreignSampleIntensity;
     long double mixSamplePosition;
+    remappedAudioSample nextFrameSample, lastFrameSample, mainSample;
 
     SFLOAT* singleSampleBuffer = new SFLOAT[vi.AudioChannels()];
     SFLOAT* singleMixSampleBuffer = new SFLOAT[vi.AudioChannels()];
@@ -557,32 +561,62 @@ void __stdcall RemapFrames::GetAudio(void* buf, __int64 start, __int64 count, IS
                 
                 framePlace = ((long double)absolutePlace / samplesPerFrame);
                 roundedFramePlace = round((long double)absolutePlace / samplesPerFrame);
-                distanceFromFrameBoundary = abs( framePlace - roundedFramePlace);
+                distanceFromFrameBoundary = abs( framePlace - roundedFramePlace) * samplesPerFrame;
                 
                 
-                remappedAudioSample mainSample = remapAudioSample(absolutePlace, audioSampleRate, videoFramerate);
+                mainSample = remapAudioSample(absolutePlace, audioSampleRate, videoFramerate);
                 
                 if (distanceFromFrameBoundary > audioBlendSamples || roundedFramePlace == 0) {
                     // All good. No blending needed.
                     sampleToGet = mainSample.audioSample;
                     child->GetAudio(singleSampleBuffer, sampleToGet, 1, env);
+
                 }
                 else {
-                    mainSampleIntensity = (long double)0.5 + ((long double)0.5 *  distanceFromFrameBoundary / audioBlendSamples); // 0.5 because we only blend half way, the other half is blended in the other frame.
+                    mainSampleIntensity = (long double)0.5 + ((long double)0.5 *  (distanceFromFrameBoundary / (long double)audioBlendSamples)); // 0.5 because we only blend half way, the other half is blended in the other frame.
                     foreignSampleIntensity = 1 - mainSampleIntensity;
                     if (roundedFramePlace > framePlace) {
-                        remappedAudioSample nextFrameSample = remapAudioSample(absolutePlace + samplesPerFrame, audioSampleRate, videoFramerate);
-                        mixSamplePosition = nextFrameSample.audioSample - (nextFrameSample.backwards ? audioSampleRate : -audioSampleRate); 
+                        nextFrameSample = remapAudioSample(absolutePlace + samplesPerFrame, audioSampleRate, videoFramerate);
+                        mixSamplePosition = nextFrameSample.audioSample - (nextFrameSample.backwards ? -samplesPerFrame : samplesPerFrame);
                     }
                     else {
-                        remappedAudioSample lastFrameSample = remapAudioSample(absolutePlace - samplesPerFrame, audioSampleRate, videoFramerate);
-                        mixSamplePosition = lastFrameSample.audioSample + (lastFrameSample.backwards ? audioSampleRate : -audioSampleRate);
+                        lastFrameSample = remapAudioSample(absolutePlace - samplesPerFrame, audioSampleRate, videoFramerate);
+                        mixSamplePosition = lastFrameSample.audioSample + (lastFrameSample.backwards ? -samplesPerFrame : samplesPerFrame);
                     }
                     child->GetAudio(singleSampleBuffer, mainSample.audioSample, 1, env);
-                    child->GetAudio(singleMixSampleBuffer, mixSamplePosition, 1, env);
-                    for (int j = 0; j < channels; j++) {
-                        singleSampleBuffer[j] = mainSampleIntensity *singleSampleBuffer[j] + foreignSampleIntensity*singleMixSampleBuffer[j];
+
+                    // No need to blend the same sample with itself, that's ridiculous.
+                    if(mainSample.audioSample != mixSamplePosition){
+
+                        child->GetAudio(singleMixSampleBuffer, mixSamplePosition, 1, env);
+                        /*for (int j = 0; j < channels; j++) {
+                            singleSampleBuffer[j] = mainSampleIntensity *singleSampleBuffer[j] + foreignSampleIntensity*singleMixSampleBuffer[j];
+                        }*/
+                        for (int j = 0; j < channels; j++) {
+                            singleSampleBuffer[j] = sqrt(mainSampleIntensity) *singleSampleBuffer[j] + sqrt(foreignSampleIntensity)*singleMixSampleBuffer[j];
+                        }
                     }
+                    /*
+                    std::ofstream myfile;
+                    myfile.open("blah.txt", std::ios::out | std::ios::app);
+                    myfile << distanceFromFrameBoundary << "\n";
+                    myfile << mainSampleIntensity << "\n";
+                    myfile << foreignSampleIntensity << "\n";
+                    myfile << mainSample.realFrame << "\n";
+                    if (roundedFramePlace > framePlace) {
+
+                        myfile << "next " << nextFrameSample.realFrame << "\n";
+                        myfile << "next is backwards " << nextFrameSample.backwards << "\n";
+                        myfile << "here " << mainSample.audioSample << " next " << nextFrameSample.audioSample << " mixsampleposition " <<  mixSamplePosition << "\n";
+                    }
+                    else {
+
+                        myfile << "last " << lastFrameSample.realFrame << "\n";
+                        myfile << "last is backwards " << lastFrameSample.backwards << "\n";
+                        myfile << "here " << mainSample.audioSample << " last " << nextFrameSample.audioSample << " mixsampleposition " << mixSamplePosition << "\n";
+                    }
+                    myfile << "\n\n";
+                    myfile.close();*/
                 }
 
                 /*works: sampleToGet = start + (__int64)i;
@@ -627,6 +661,7 @@ inline RemapFrames::remappedAudioSample RemapFrames::remapAudioSample(long long 
     remappedAudioSample returnValue;
     returnValue.audioSample = sampleToGet;
     returnValue.backwards = frameRunBackwards;
+    returnValue.realFrame = whichFrame;
     return returnValue;
 }
 
@@ -707,7 +742,15 @@ AVSValue __cdecl RemapFrames::CreateSimple(AVSValue args, void* userDataP, IScri
 
     const char* filenameP = args[i_f].Defined () ? args[i_f].AsString() : 0;
     const char* mappingsP = args[i_m].Defined () ? args[i_m].AsString() : 0;
-    const int audioBlendSamplesArg = args[3].Defined () ? args[i_m].AsInt() : 0;
+    const int audioBlendSamplesArg = args[3].Defined () ? args[3].AsInt() : 0;
+
+
+
+    /*std::ofstream myfile;
+    myfile.open("blah.txt", std::ios::out | std::ios::app);
+    myfile << args[3].Defined() << "\n";
+    myfile << audioBlendSamplesArg << "\n";
+    myfile.close();*/
 
     if (   clip->GetVideoInfo().num_frames == 0
         || (userDataP != 0 && is_empty_string (filenameP) && is_empty_string (mappingsP)))
